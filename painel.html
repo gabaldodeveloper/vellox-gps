@@ -36,6 +36,7 @@
     }
     #status-bar.ativo { background: #e6f9f0; border-color: #5dca8a; color: #1a7a46; }
     #status-bar.aguardando { background: #fff8e6; border-color: #f5c842; color: #7a5c00; }
+    #status-bar.offline { background: #f0f0f0; border-color: #ccc; color: #888; }
 
     .dot {
       width: 8px; height: 8px; border-radius: 50%;
@@ -99,6 +100,19 @@
     let map, marker;
     let updates = 0;
     let mapInitialized = false;
+    let lastUpdatedAt = null;
+
+    // verifica presença a cada 5 segundos
+    setInterval(() => {
+      if (!lastUpdatedAt) return;
+      const segundos = Math.round((Date.now() - lastUpdatedAt) / 1000);
+      if (segundos > 30) {
+        const bar = document.getElementById('status-bar');
+        bar.className = 'offline';
+        document.getElementById('status-text').innerText =
+          '⚫ Motoboy offline — último sinal há ' + segundos + 's';
+      }
+    }, 5000);
 
     function initMap(lat, lng) {
       map = L.map('map').setView([lat, lng], 16);
@@ -150,6 +164,7 @@
       }
 
       updates++;
+      lastUpdatedAt = updated_at;
       document.getElementById('lat').innerText = lat.toFixed(6);
       document.getElementById('lng').innerText = lng.toFixed(6);
       document.getElementById('acc').innerText = acc + ' m';
