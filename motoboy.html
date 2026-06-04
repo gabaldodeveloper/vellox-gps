@@ -8,30 +8,34 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: sans-serif; background: #f5f5f5; padding: 12px; }
-    h1 { font-size: 18px; font-weight: 600; color: #1a1a1a; margin-bottom: 12px; }
+    h1 { font-size: 18px; font-weight: 600; color: #1a1a1a; margin-bottom: 10px; }
 
     #badge {
       display: inline-flex; align-items: center; gap: 6px;
       font-size: 13px; padding: 4px 12px; border-radius: 8px;
       background: #f0f0f0; border: 1px solid #ddd; color: #666;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     #badge.ativo { background: #e6f9f0; border-color: #5dca8a; color: #1a7a46; }
     #badge.erro  { background: #fdecea; border-color: #e87070; color: #a32d2d; }
 
-    #coords { font-size: 12px; color: #888; font-family: monospace; margin-bottom: 10px; display: block; }
+    #destino-bar {
+      font-size: 13px; padding: 8px 12px; border-radius: 8px;
+      background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
+      margin-bottom: 8px; display: none;
+    }
 
     #map {
-      width: 100%; height: calc(100vh - 220px);
+      width: 100%; height: calc(100vh - 240px);
       min-height: 300px; border-radius: 12px;
       border: 1px solid #ddd; overflow: hidden;
-      background: #e8e8e8; margin-bottom: 12px;
+      background: #e8e8e8; margin-bottom: 10px;
     }
 
     .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
     .card { background: white; border-radius: 8px; padding: 10px 12px; border: 1px solid #eee; }
     .card-label { font-size: 11px; color: #999; margin-bottom: 4px; }
-    .card-value { font-size: 17px; font-weight: 600; color: #1a1a1a; }
+    .card-value { font-size: 15px; font-weight: 600; color: #1a1a1a; }
 
     .info { font-size: 11px; color: #aaa; }
   </style>
@@ -41,7 +45,7 @@
   <h1>🏍️ Vellox — Motoboy</h1>
 
   <span id="badge">📍 Aguardando GPS...</span>
-  <span id="coords"></span>
+  <div id="destino-bar">📦 Destino: <span id="destino-nome">—</span></div>
 
   <div id="map"></div>
 
@@ -55,7 +59,7 @@
       <div class="card-value" id="updates">0</div>
     </div>
     <div class="card">
-      <div class="card-label">distância total</div>
+      <div class="card-label">dist. percorrida</div>
       <div class="card-value" id="dist">0 m</div>
     </div>
   </div>
@@ -65,7 +69,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyC9TEivEbj_fbpCSmdAWdxRxF3zFyHsN7o",
@@ -79,44 +83,97 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-
     const MOTOBOY_ID = "motoboy_01";
     const DISTANCIA_MINIMA = 10;
 
-    let map, marker, polyline;
-    let updates = 0;
-    let totalDist = 0;
-    let lastPos = null;
-    let trail = [];
+    let map, markerMotoboy, markerDestino, rotaLayer;
+    let updates = 0, totalDist = 0;
+    let lastPos = null, trail = [];
+    let destinoAtual = null;
+
+    // ícone motoboy
+    const iconMotoboy = L.divIcon({
+      html: '<div style="width:16px;height:16px;border-radius:50%;background:#e84545;border:3px solid white;box-shadow:0 0 0 2px #e84545;"></div>',
+      iconSize: [16, 16], iconAnchor: [8, 8], className: ''
+    });
+
+    // ícone destino — pino azul
+    const iconDestino = L.divIcon({
+      html: '<div style="width:20px;height:20px;border-radius:50% 50% 50% 0;background:#2563eb;border:3px solid white;box-shadow:0 0 0 2px #2563eb;transform:rotate(-45deg);"></div>',
+      iconSize: [20, 20], iconAnchor: [10, 20], className: ''
+    });
 
     function initMap(lat, lng) {
-      map = L.map('map').setView([lat, lng], 17);
+      map = L.map('map').setView([lat, lng], 16);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap',
-        maxZoom: 19
+        attribution: '© OpenStreetMap', maxZoom: 19
       }).addTo(map);
-
-      const icon = L.divIcon({
-        html: '<div style="width:16px;height:16px;border-radius:50%;background:#e84545;border:3px solid white;box-shadow:0 0 0 2px #e84545;"></div>',
-        iconSize: [16, 16],
-        iconAnchor: [8, 8],
-        className: ''
-      });
-
-      marker = L.marker([lat, lng], { icon }).addTo(map);
-      polyline = L.polyline([], { color: '#e84545', weight: 3, opacity: 0.7 }).addTo(map);
+      markerMotoboy = L.marker([lat, lng], { icon: iconMotoboy }).addTo(map);
     }
 
     function haversine(a, b) {
       const R = 6371000;
       const dLat = (b.lat - a.lat) * Math.PI / 180;
       const dLng = (b.lng - a.lng) * Math.PI / 180;
-      const x = Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(a.lat * Math.PI/180) * Math.cos(b.lat * Math.PI/180) *
-        Math.sin(dLng/2) * Math.sin(dLng/2);
+      const x = Math.sin(dLat/2)**2 +
+        Math.cos(a.lat * Math.PI/180) * Math.cos(b.lat * Math.PI/180) * Math.sin(dLng/2)**2;
       return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
     }
 
+    // busca rota via OSRM e desenha no mapa
+    async function desenharRota(origemLat, origemLng, destinoLat, destinoLng) {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${origemLng},${origemLat};${destinoLng},${destinoLat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.code !== 'Ok') return;
+
+        const coords = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+
+        if (rotaLayer) map.removeLayer(rotaLayer);
+        rotaLayer = L.polyline(coords, { color: '#2563eb', weight: 4, opacity: 0.7 }).addTo(map);
+
+        // ajusta mapa para mostrar rota completa
+        map.fitBounds(rotaLayer.getBounds(), { padding: [40, 40] });
+
+      } catch (err) {
+        console.error('Erro ao buscar rota:', err);
+      }
+    }
+
+    // escuta destino atribuído pelo despachante
+    onValue(ref(db, 'entregas/' + MOTOBOY_ID), (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+
+      const { destino_lat, destino_lng, destino_endereco } = data;
+      destinoAtual = { lat: destino_lat, lng: destino_lng };
+
+      // mostra barra de destino
+      const bar = document.getElementById('destino-bar');
+      bar.style.display = 'block';
+      document.getElementById('destino-nome').innerText = destino_endereco.split(',').slice(0, 3).join(',');
+
+      // coloca marcador de destino
+      if (map) {
+        if (markerDestino) {
+          markerDestino.setLatLng([destino_lat, destino_lng]);
+        } else {
+          markerDestino = L.marker([destino_lat, destino_lng], { icon: iconDestino })
+            .addTo(map)
+            .bindPopup('📦 ' + destino_endereco.split(',').slice(0, 2).join(','));
+          markerDestino.openPopup();
+        }
+
+        // desenha rota se já tem posição atual
+        if (lastPos) {
+          desenharRota(lastPos.lat, lastPos.lng, destino_lat, destino_lng);
+        }
+      }
+    });
+
+    // GPS
     function onPosition(pos) {
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
@@ -126,22 +183,31 @@
         const dist = haversine(lastPos, { lat, lng });
         if (dist < DISTANCIA_MINIMA) return;
         totalDist += dist;
+
+        // redesenha rota a cada atualização de posição
+        if (destinoAtual) {
+          desenharRota(lat, lng, destinoAtual.lat, destinoAtual.lng);
+        }
       }
 
-      if (!map) initMap(lat, lng);
-
-      marker.setLatLng([lat, lng]);
-      map.panTo([lat, lng]);
+      if (!map) {
+        initMap(lat, lng);
+        // se já tem destino mas mapa acabou de iniciar
+        if (destinoAtual) {
+          markerDestino = L.marker([destinoAtual.lat, destinoAtual.lng], { icon: iconDestino }).addTo(map);
+          desenharRota(lat, lng, destinoAtual.lat, destinoAtual.lng);
+        }
+      } else {
+        markerMotoboy.setLatLng([lat, lng]);
+        if (!destinoAtual) map.panTo([lat, lng]);
+      }
 
       trail.push([lat, lng]);
-      polyline.setLatLngs(trail);
-
       lastPos = { lat, lng };
       updates++;
 
       document.getElementById('updates').innerText = updates;
       document.getElementById('acc').innerText = Math.round(acc) + ' m';
-      document.getElementById('coords').innerText = lat.toFixed(6) + ', ' + lng.toFixed(6);
       document.getElementById('dist').innerText = totalDist < 1000
         ? Math.round(totalDist) + ' m'
         : (totalDist / 1000).toFixed(2) + ' km';
@@ -150,12 +216,8 @@
       badge.innerText = '✅ Enviando posição...';
       badge.className = 'ativo';
 
-      // envia para o Firebase
       set(ref(db, 'motoboys/' + MOTOBOY_ID), {
-        lat,
-        lng,
-        acc: Math.round(acc),
-        updated_at: Date.now()
+        lat, lng, acc: Math.round(acc), updated_at: Date.now()
       });
     }
 
@@ -163,16 +225,11 @@
       const badge = document.getElementById('badge');
       badge.innerText = '❌ ' + err.message;
       badge.className = 'erro';
-      if (!map) {
-        initMap(-25.4284, -49.2733);
-        document.getElementById('coords').innerText = 'demo — Curitiba, PR';
-      }
+      if (!map) initMap(-25.4284, -49.2733);
     }
 
     if (navigator.geolocation) {
-      navigator.geolocation.watchPosition(onPosition, onError, {
-        enableHighAccuracy: true
-      });
+      navigator.geolocation.watchPosition(onPosition, onError, { enableHighAccuracy: true });
     } else {
       onError({ message: 'Geolocation não suportado' });
     }
