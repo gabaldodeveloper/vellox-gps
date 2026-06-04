@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vellox — Painel</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #f5f5f5; padding: 16px; }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    header h1 { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+    header span { font-size: 12px; color: #999; }
+
+    #map {
+      width: 100%; height: calc(100vh - 200px);
+      min-height: 400px; border-radius: 12px;
+      border: 1px solid #ddd; overflow: hidden;
+      background: #e8e8e8; margin-bottom: 14px;
+    }
+
+    .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+    @media (max-width: 600px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+    .card { background: white; border-radius: 8px; padding: 10px 14px; border: 1px solid #eee; }
+    .card-label { font-size: 11px; color: #999; margin-bottom: 4px; }
+    .card-value { font-size: 17px; font-weight: 600; color: #1a1a1a; }
+
+    #status-bar {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; padding: 8px 14px; border-radius: 8px;
+      background: #f0f0f0; border: 1px solid #ddd; color: #666;
+    }
+    #status-bar.ativo { background: #e6f9f0; border-color: #5dca8a; color: #1a7a46; }
+    #status-bar.aguardando { background: #fff8e6; border-color: #f5c842; color: #7a5c00; }
+
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: currentColor; flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>🗺️ Vellox — Painel</h1>
+    <span id="last-update">Sem dados ainda</span>
+  </header>
+
+  <div id="map"></div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">latitude</div>
+      <div class="card-value" id="lat">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">longitude</div>
+      <div class="card-value" id="lng">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">precisão GPS</div>
+      <div class="card-value" id="acc">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">atualizações</div>
+      <div class="card-value" id="updates">0</div>
+    </div>
+  </div>
+
+  <div id="status-bar" class="aguardando">
+    <div class="dot"></div>
+    <span id="status-text">Aguardando posição do motoboy...</span>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyC9TEivEbj_fbpCSmdAWdxRxF3zFyHsN7o",
+      authDomain: "vellox-gps.firebaseapp.com",
+      databaseURL: "https://vellox-gps-default-rtdb.firebaseio.com",
+      projectId: "vellox-gps",
+      storageBucket: "vellox-gps.firebasestorage.app",
+      messagingSenderId: "628189494210",
+      appId: "1:628189494210:web:de677c675deb8ef8e7745b"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const MOTOBOY_ID = "motoboy_01";
+
+    let map, marker;
+    let updates = 0;
+    let mapInitialized = false;
+
+    function initMap(lat, lng) {
+      map = L.map('map').setView([lat, lng], 16);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap',
+        maxZoom: 19
+      }).addTo(map);
+
+      const icon = L.divIcon({
+        html: `<div style="
+          width:20px;height:20px;border-radius:50%;
+          background:#e84545;border:3px solid white;
+          box-shadow:0 0 0 2px #e84545;
+          animation: pulse 1.5s infinite;
+        "></div>
+        <style>
+          @keyframes pulse {
+            0%   { box-shadow: 0 0 0 2px #e84545; }
+            50%  { box-shadow: 0 0 0 8px rgba(232,69,69,0.2); }
+            100% { box-shadow: 0 0 0 2px #e84545; }
+          }
+        </style>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+        className: ''
+      });
+
+      marker = L.marker([lat, lng], { icon }).addTo(map);
+      mapInitialized = true;
+    }
+
+    function formatTime(ts) {
+      const d = new Date(ts);
+      return d.toLocaleTimeString('pt-BR');
+    }
+
+    // escuta mudanças em tempo real no Firebase
+    onValue(ref(db, 'motoboys/' + MOTOBOY_ID), (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+
+      const { lat, lng, acc, updated_at } = data;
+
+      if (!mapInitialized) {
+        initMap(lat, lng);
+      } else {
+        marker.setLatLng([lat, lng]);
+        map.panTo([lat, lng]);
+      }
+
+      updates++;
+      document.getElementById('lat').innerText = lat.toFixed(6);
+      document.getElementById('lng').innerText = lng.toFixed(6);
+      document.getElementById('acc').innerText = acc + ' m';
+      document.getElementById('updates').innerText = updates;
+      document.getElementById('last-update').innerText = 'Última atualização: ' + formatTime(updated_at);
+
+      const bar = document.getElementById('status-bar');
+      bar.className = 'ativo';
+      document.getElementById('status-text').innerText = '🏍️ Motoboy online — posição recebida às ' + formatTime(updated_at);
+    });
+  </script>
+
+</body>
+</html>
