@@ -200,6 +200,9 @@
     // flag que bloqueia novas missões enquanto o motoboy não clicar "Pronto"
     // evita que uma nova missão do despachante apareça sobre o card de resumo
     let aguardandoReset = false;
+    // ID da missão que o motoboy está visualizando atualmente
+    // usado para detectar se o despachante trocou o destino antes do aceite
+    let missaoIdLocal = null;
 
     // ─── ícones ───────────────────────────────────────────────────────────────
     const iconMotoboy = L.divIcon({
@@ -336,6 +339,7 @@
     window.proximaMissao = async function() {
       // libera o listener para receber novas missões
       aguardandoReset = false;
+      missaoIdLocal   = null;
 
       // apaga a entrega do Firebase — o painel detecta e reseta automaticamente
       await remove(ref(db, 'entregas/' + MOTOBOY_ID));
@@ -361,7 +365,22 @@
       const atualizacao = { status: novoStatus };
 
       if (novoStatus === 'aceito') {
-        // registra timestamp do aceite e inicia o timer
+        // verifica no Firebase se o missao_id ainda é o mesmo que o motoboy viu
+        // isso detecta se o despachante trocou o destino enquanto o motoboy decidia
+        const resCheck = await fetch(
+          'https://vellox-gps-default-rtdb.firebaseio.com/entregas/' +
+          MOTOBOY_ID + '/missao_id.json'
+        );
+        const missaoIdFirebase = await resCheck.json();
+
+        if (missaoIdFirebase && missaoIdFirebase !== missaoIdLocal) {
+          // missão foi trocada — avisa e não aceita
+          // o listener já vai atualizar a tela com o novo destino automaticamente
+          alert('⚠️ O destino foi alterado pelo despachante. Verifique o novo endereço antes de aceitar.');
+          return;
+        }
+
+        // missão é a mesma — registra timestamp do aceite e inicia o timer
         atualizacao.ts_aceite = agora;
         tsAceite = agora;
         timerInterval = setInterval(atualizarTimer, 1000);
@@ -399,14 +418,16 @@
       // ignora qualquer nova missão até ele liberar
       if (aguardandoReset) return;
 
-      const { destino_lat, destino_lng, destino_endereco,
+      const { missao_id, destino_lat, destino_lng, destino_endereco,
               status, criado_em, dist_prevista_m } = data;
 
-      // ignora se for o mesmo status e destino que já temos
-      if (status === statusAtual && destinoAtual) return;
+      // ignora se for o mesmo status e missão que já temos
+      if (status === statusAtual && missao_id === missaoIdLocal) return;
 
-      statusAtual  = status;
-      destinoAtual = { lat: destino_lat, lng: destino_lng };
+      // salva o ID da missão atual para comparar no momento do aceite
+      missaoIdLocal = missao_id;
+      statusAtual   = status;
+      destinoAtual  = { lat: destino_lat, lng: destino_lng };
 
       // atualiza endereço e horário no painel
       document.getElementById('missao-endereco').innerText =

@@ -339,15 +339,20 @@
         distPrevista = await buscarDistanciaOSRM(ml.lat, ml.lng, lat, lng);
       }
 
+      // missao_id = timestamp de criação — ID único por missão
+      // permite que o motoboy detecte se a missão foi trocada antes do aceite
+      const missaoId = Date.now();
+
       // salva entrega no Firebase com status inicial 'pendente'
       // o motoboy vai escutar essa mudança e receber a missão
       set(ref(db, 'entregas/' + MOTOBOY_ID), {
+        missao_id:        missaoId,
         destino_lat:      lat,
         destino_lng:      lng,
         destino_endereco: nome,
         status:           'pendente',
         dist_prevista_m:  Math.round(distPrevista),
-        criado_em:        Date.now()
+        criado_em:        missaoId
       });
 
       setStatus('✅ Missão criada — aguardando aceite do motoboy.');
