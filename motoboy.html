@@ -197,6 +197,10 @@
     let tsAceite     = null;
     let timerInterval = null;
 
+    // flag que bloqueia novas missões enquanto o motoboy não clicar "Pronto"
+    // evita que uma nova missão do despachante apareça sobre o card de resumo
+    let aguardandoReset = false;
+
     // ─── ícones ───────────────────────────────────────────────────────────────
     const iconMotoboy = L.divIcon({
       html: '<div style="width:16px;height:16px;border-radius:50%;background:#e84545;border:3px solid white;box-shadow:0 0 0 2px #e84545;"></div>',
@@ -307,6 +311,9 @@
     function mostrarResumo() {
       const duracao = tsAceite ? Date.now() - tsAceite : 0;
 
+      // bloqueia novas missões até o motoboy clicar "Pronto"
+      aguardandoReset = true;
+
       // para o timer
       if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 
@@ -327,8 +334,10 @@
 
     // ─── reset para próxima missão ────────────────────────────────────────────
     window.proximaMissao = async function() {
+      // libera o listener para receber novas missões
+      aguardandoReset = false;
+
       // apaga a entrega do Firebase — o painel detecta e reseta automaticamente
-      // remove() apaga o nó inteiro em 'entregas/motoboy_01'
       await remove(ref(db, 'entregas/' + MOTOBOY_ID));
 
       // reseta todas as variáveis de estado locais
@@ -385,6 +394,10 @@
       // Firebase retorna null quando o nó foi removido (após proximaMissao)
       // nesse caso ignora — o reset já foi feito localmente
       if (!data) return;
+
+      // motoboy está no card de resumo aguardando clicar "Pronto"
+      // ignora qualquer nova missão até ele liberar
+      if (aguardandoReset) return;
 
       const { destino_lat, destino_lng, destino_endereco,
               status, criado_em, dist_prevista_m } = data;
