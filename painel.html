@@ -311,6 +311,26 @@
       statusEl.innerText = labels[status] || status;
     }
 
+    // ─── bloqueia/libera formulário conforme status da missão ──────────────────
+    // impede o despachante de criar nova missão enquanto uma está em andamento
+    function atualizarFormulario(status) {
+      const emAndamento = ['pendente', 'aceito', 'coletado'].includes(status);
+      const input = document.getElementById('endereco-input');
+      const btn   = document.getElementById('btn-definir');
+
+      input.disabled = emAndamento;
+      btn.disabled   = emAndamento;
+
+      if (emAndamento) {
+        // avisa o despachante por que o campo está bloqueado
+        document.getElementById('geocode-status').innerText =
+          '⚠️ Missão em andamento — aguarde o motoboy concluir.';
+      } else {
+        // limpa a mensagem quando libera
+        document.getElementById('geocode-status').innerText = '';
+      }
+    }
+
     // ─── aplica destino no mapa e salva no Firebase ───────────────────────────
     // função central chamada pelas três formas de busca
     async function aplicarDestino(lat, lng, nome) {
@@ -472,14 +492,17 @@
         if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
         // remove pino de destino do mapa
         if (markerDestino) { map.removeLayer(markerDestino); markerDestino = null; }
+        // libera o formulário — sem missão ativa, despachante pode criar nova
+        atualizarFormulario('reset');
         return;
       }
 
       const { status, dist_prevista_m, dist_realizada_total_m,
               ts_aceite, duracao_total_ms } = data;
 
-      // atualiza a barra de etapas
+      // atualiza etapas e bloqueia/libera formulário conforme status
       atualizarSteps(status);
+      atualizarFormulario(status);
 
       if (dist_prevista_m)
         document.getElementById('dist-prevista').innerText = formatDist(dist_prevista_m);

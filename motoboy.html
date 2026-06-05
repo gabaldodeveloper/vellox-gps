@@ -424,6 +424,11 @@
       // ignora se for o mesmo status e missão que já temos
       if (status === statusAtual && missao_id === missaoIdLocal) return;
 
+      // se já está em missão ativa (aceito ou coletado), ignora qualquer
+      // nova missão que o despachante tente criar — o bloqueio no painel
+      // já impede isso, mas essa linha é a segunda linha de defesa
+      if (statusAtual === 'aceito' || statusAtual === 'coletado') return;
+
       // salva o ID da missão atual para comparar no momento do aceite
       missaoIdLocal = missao_id;
       statusAtual   = status;
