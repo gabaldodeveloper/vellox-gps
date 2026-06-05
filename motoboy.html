@@ -19,7 +19,7 @@
     #badge.ativo { background: #e6f9f0; border-color: #5dca8a; color: #1a7a46; }
     #badge.erro  { background: #fdecea; border-color: #e87070; color: #a32d2d; }
 
-    /* painel de missão */
+    /* painel de missão ativa */
     #missao-panel {
       border-radius: 10px; border: 1px solid #ddd;
       background: white; margin-bottom: 10px;
@@ -29,10 +29,9 @@
       padding: 10px 14px; font-size: 13px; font-weight: 600;
       display: flex; align-items: center; justify-content: space-between;
     }
-    #missao-header.pendente  { background: #fff8e6; color: #7a5c00; border-bottom: 1px solid #f5c842; }
-    #missao-header.aceito    { background: #eff6ff; color: #1e40af; border-bottom: 1px solid #bfdbfe; }
-    #missao-header.coletado  { background: #f0fdf4; color: #166534; border-bottom: 1px solid #86efac; }
-    #missao-header.entregue  { background: #f0fdf4; color: #166534; border-bottom: 1px solid #86efac; }
+    #missao-header.pendente { background: #fff8e6; color: #7a5c00; border-bottom: 1px solid #f5c842; }
+    #missao-header.aceito   { background: #eff6ff; color: #1e40af; border-bottom: 1px solid #bfdbfe; }
+    #missao-header.coletado { background: #fefce8; color: #854d0e; border-bottom: 1px solid #fde68a; }
 
     #missao-body { padding: 10px 14px; font-size: 13px; color: #444; }
     #missao-endereco { font-weight: 500; margin-bottom: 8px; }
@@ -54,9 +53,32 @@
     .btn-entregar { background: #16a34a; color: white; }
     .btn-acao:active { opacity: 0.85; }
 
+    /* card de resumo pós-entrega */
+    #resumo-panel {
+      display: none;
+      border-radius: 10px; border: 1px solid #86efac;
+      background: #f0fdf4; padding: 16px;
+      margin-bottom: 10px; text-align: center;
+    }
+    #resumo-panel h2 { font-size: 22px; margin-bottom: 4px; }
+    #resumo-panel p  { font-size: 13px; color: #166534; margin-bottom: 12px; }
+    .resumo-stats {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+      margin-bottom: 14px;
+    }
+    .resumo-stat { background: white; border-radius: 8px; padding: 8px; border: 1px solid #bbf7d0; }
+    .resumo-stat-label { font-size: 10px; color: #999; margin-bottom: 2px; }
+    .resumo-stat-value { font-size: 14px; font-weight: 700; color: #166534; }
+    .btn-proxima {
+      width: 100%; padding: 13px; border: none; border-radius: 8px;
+      background: #16a34a; color: white; font-size: 15px; font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-proxima:active { opacity: 0.85; }
+
     #map {
       width: 100%; height: calc(100vh - 320px);
-      min-height: 260px; border-radius: 12px;
+      min-height: 240px; border-radius: 12px;
       border: 1px solid #ddd; overflow: hidden;
       background: #e8e8e8; margin-bottom: 10px;
     }
@@ -74,6 +96,7 @@
   <h1>🏍️ Vellox — Motoboy</h1>
   <span id="badge">📍 Aguardando GPS...</span>
 
+  <!-- painel de missão ativa — aparece quando há missão pendente/aceita/coletada -->
   <div id="missao-panel">
     <div id="missao-header" class="pendente">
       <span id="missao-status-label">⏳ Nova missão</span>
@@ -101,6 +124,28 @@
     </div>
   </div>
 
+  <!-- resumo pós-entrega — substitui o painel de missão -->
+  <div id="resumo-panel">
+    <h2>✅ Entrega concluída!</h2>
+    <p>Missão finalizada com sucesso.</p>
+    <div class="resumo-stats">
+      <div class="resumo-stat">
+        <div class="resumo-stat-label">dist. prevista</div>
+        <div class="resumo-stat-value" id="resumo-prevista">—</div>
+      </div>
+      <div class="resumo-stat">
+        <div class="resumo-stat-label">dist. realizada</div>
+        <div class="resumo-stat-value" id="resumo-realizada">—</div>
+      </div>
+      <div class="resumo-stat">
+        <div class="resumo-stat-label">duração total</div>
+        <div class="resumo-stat-value" id="resumo-duracao">—</div>
+      </div>
+    </div>
+    <!-- ao clicar, limpa o Firebase e reseta tudo -->
+    <button class="btn-proxima" onclick="proximaMissao()">🏍️ Pronto — próxima missão</button>
+  </div>
+
   <div id="map"></div>
 
   <div class="cards">
@@ -123,8 +168,9 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getDatabase, ref, set, update, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getDatabase, ref, set, update, remove, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
+    // ─── Firebase config ──────────────────────────────────────────────────────
     const firebaseConfig = {
       apiKey: "AIzaSyC9TEivEbj_fbpCSmdAWdxRxF3zFyHsN7o",
       authDomain: "vellox-gps.firebaseapp.com",
@@ -136,20 +182,22 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    const MOTOBOY_ID = "motoboy_01";
-    const DISTANCIA_MINIMA = 10;
+    const db  = getDatabase(app);
+    const MOTOBOY_ID     = "motoboy_01";
+    const DISTANCIA_MINIMA = 10; // metros mínimos para contar deslocamento
 
+    // ─── variáveis de estado ──────────────────────────────────────────────────
     let map, markerMotoboy, markerDestino, rotaLayer;
-    let updates = 0, totalDist = 0;
-    let lastPos = null;
+    let updates    = 0;
+    let totalDist  = 0;
+    let lastPos    = null;
     let destinoAtual = null;
-    let statusAtual = null;
-    let entregaId = null;
+    let statusAtual  = null;
     let distPrevista = 0;
-    let tsAceite = null;
+    let tsAceite     = null;
     let timerInterval = null;
 
+    // ─── ícones ───────────────────────────────────────────────────────────────
     const iconMotoboy = L.divIcon({
       html: '<div style="width:16px;height:16px;border-radius:50%;background:#e84545;border:3px solid white;box-shadow:0 0 0 2px #e84545;"></div>',
       iconSize: [16,16], iconAnchor: [8,8], className: ''
@@ -159,6 +207,7 @@
       iconSize: [20,20], iconAnchor: [10,20], className: ''
     });
 
+    // ─── inicializa mapa ──────────────────────────────────────────────────────
     function initMap(lat, lng) {
       map = L.map('map').setView([lat, lng], 16);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -167,6 +216,9 @@
       markerMotoboy = L.marker([lat, lng], { icon: iconMotoboy }).addTo(map);
     }
 
+    // ─── helpers ──────────────────────────────────────────────────────────────
+
+    // calcula distância em metros entre dois pontos geográficos
     function haversine(a, b) {
       const R = 6371000;
       const dLat = (b.lat - a.lat) * Math.PI / 180;
@@ -179,145 +231,205 @@
     function formatDist(m) {
       return m < 1000 ? Math.round(m) + ' m' : (m/1000).toFixed(2) + ' km';
     }
-
     function formatTempo(ms) {
-      const s = Math.floor(ms / 1000);
-      const m = Math.floor(s / 60);
-      const h = Math.floor(m / 60);
-      if (h > 0) return `${h}h ${m % 60}min`;
-      if (m > 0) return `${m}min ${s % 60}s`;
+      const s = Math.floor(ms/1000), m = Math.floor(s/60), h = Math.floor(m/60);
+      if (h > 0) return `${h}h ${m%60}min`;
+      if (m > 0) return `${m}min ${s%60}s`;
       return `${s}s`;
     }
 
+    // atualiza o timer de duração da missão a cada segundo
     function atualizarTimer() {
       if (!tsAceite) return;
       document.getElementById('tempo-missao').innerText = formatTempo(Date.now() - tsAceite);
     }
 
+    // ─── desenha rota via OSRM ────────────────────────────────────────────────
     async function desenharRota(origemLat, origemLng, destinoLat, destinoLng) {
       try {
-        const url = `https://router.project-osrm.org/route/v1/driving/${origemLng},${origemLat};${destinoLng},${destinoLat}?overview=full&geometries=geojson`;
-        const res = await fetch(url);
+        const url = `https://router.project-osrm.org/route/v1/driving/` +
+                    `${origemLng},${origemLat};${destinoLng},${destinoLat}` +
+                    `?overview=full&geometries=geojson`;
+        const res  = await fetch(url);
         const data = await res.json();
-        if (data.code !== 'Ok') return 0;
+        if (data.code !== 'Ok') return;
 
+        // converte coordenadas do formato OSRM [lng,lat] para Leaflet [lat,lng]
         const coords = data.routes[0].geometry.coordinates.map(([ln, lt]) => [lt, ln]);
+
+        // remove rota anterior antes de desenhar a nova
         if (rotaLayer) map.removeLayer(rotaLayer);
         rotaLayer = L.polyline(coords, { color: '#2563eb', weight: 4, opacity: 0.7 }).addTo(map);
-        map.fitBounds(rotaLayer.getBounds(), { padding: [40, 40] });
-
-        return data.routes[0].distance; // metros
-      } catch { return 0; }
+        map.fitBounds(rotaLayer.getBounds(), { padding: [40,40] });
+      } catch { /* falha silenciosa — rota não é crítica */ }
     }
 
-    // atualiza UI conforme status da missão
+    // ─── atualiza interface conforme status ───────────────────────────────────
     function atualizarUI(status) {
-      const panel = document.getElementById('missao-panel');
+      const panel  = document.getElementById('missao-panel');
       const header = document.getElementById('missao-header');
       const label  = document.getElementById('missao-status-label');
 
-      panel.style.display = 'block';
-
-      document.getElementById('btn-aceitar').style.display  = 'none';
-      document.getElementById('btn-coletar').style.display  = 'none';
-      document.getElementById('btn-entregar').style.display = 'none';
+      // esconde todos os botões e mostra só o do status atual
+      ['btn-aceitar','btn-coletar','btn-entregar'].forEach(id => {
+        document.getElementById(id).style.display = 'none';
+      });
 
       if (status === 'pendente') {
+        panel.style.display = 'block';
         header.className = 'pendente';
-        label.innerText = '⏳ Nova missão';
+        label.innerText  = '⏳ Nova missão';
         document.getElementById('btn-aceitar').style.display = 'block';
         document.getElementById('status-label').innerText = 'pendente';
+
       } else if (status === 'aceito') {
+        panel.style.display = 'block';
         header.className = 'aceito';
-        label.innerText = '🔵 Missão aceita — buscar pacote';
+        label.innerText  = '🔵 Missão aceita — buscar pacote';
         document.getElementById('btn-coletar').style.display = 'block';
         document.getElementById('status-label').innerText = 'aceito';
+
       } else if (status === 'coletado') {
+        panel.style.display = 'block';
         header.className = 'coletado';
-        label.innerText = '🟡 Pacote coletado — em rota';
+        label.innerText  = '🟡 Pacote coletado — em rota';
         document.getElementById('btn-entregar').style.display = 'block';
         document.getElementById('status-label').innerText = 'em rota';
+
       } else if (status === 'entregue') {
-        header.className = 'entregue';
-        label.innerText = '✅ Entregue';
-        document.getElementById('status-label').innerText = 'entregue';
-        if (timerInterval) clearInterval(timerInterval);
+        // esconde painel de missão e mostra card de resumo
+        panel.style.display = 'none';
+        mostrarResumo();
       }
     }
 
-    // ação dos botões
+    // ─── exibe card de resumo pós-entrega ─────────────────────────────────────
+    function mostrarResumo() {
+      const duracao = tsAceite ? Date.now() - tsAceite : 0;
+
+      // para o timer
+      if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+
+      // preenche os dados do resumo
+      document.getElementById('resumo-prevista').innerText  = formatDist(distPrevista);
+      document.getElementById('resumo-realizada').innerText = formatDist(totalDist);
+      document.getElementById('resumo-duracao').innerText   = formatTempo(duracao);
+
+      // exibe o card
+      document.getElementById('resumo-panel').style.display = 'block';
+      document.getElementById('status-label').innerText = 'entregue';
+
+      // remove rota do mapa — missão concluída
+      if (rotaLayer) { map.removeLayer(rotaLayer); rotaLayer = null; }
+      // remove pino de destino do mapa
+      if (markerDestino) { map.removeLayer(markerDestino); markerDestino = null; }
+    }
+
+    // ─── reset para próxima missão ────────────────────────────────────────────
+    window.proximaMissao = async function() {
+      // apaga a entrega do Firebase — o painel detecta e reseta automaticamente
+      // remove() apaga o nó inteiro em 'entregas/motoboy_01'
+      await remove(ref(db, 'entregas/' + MOTOBOY_ID));
+
+      // reseta todas as variáveis de estado locais
+      destinoAtual = null;
+      statusAtual  = null;
+      totalDist    = 0;
+      distPrevista = 0;
+      tsAceite     = null;
+
+      // esconde o card de resumo
+      document.getElementById('resumo-panel').style.display = 'none';
+      document.getElementById('status-label').innerText = 'livre';
+
+      // centraliza o mapa na posição atual do motoboy
+      if (lastPos) map.setView([lastPos.lat, lastPos.lng], 16);
+    };
+
+    // ─── ações dos botões (aceitar / coletar / entregar) ─────────────────────
     window.acaoMissao = async function(novoStatus) {
-      if (!entregaId) return;
       const agora = Date.now();
       const atualizacao = { status: novoStatus };
 
       if (novoStatus === 'aceito') {
+        // registra timestamp do aceite e inicia o timer
         atualizacao.ts_aceite = agora;
         tsAceite = agora;
         timerInterval = setInterval(atualizarTimer, 1000);
       }
+
       if (novoStatus === 'coletado') {
+        // salva distância percorrida até a coleta e zera para medir só a entrega
         atualizacao.ts_coletado = agora;
         atualizacao.dist_realizada_coleta_m = Math.round(totalDist);
-        totalDist = 0; // zera para medir só a entrega
-      }
-      if (novoStatus === 'entregue') {
-        atualizacao.ts_entregue = agora;
-        atualizacao.dist_realizada_entrega_m = Math.round(totalDist);
-        atualizacao.dist_realizada_total_m = Math.round(totalDist);
-        atualizacao.duracao_total_ms = tsAceite ? agora - tsAceite : null;
+        totalDist = 0;
       }
 
-      await update(ref(db, 'entregas/' + entregaId), atualizacao);
+      if (novoStatus === 'entregue') {
+        // salva todos os dados finais da entrega
+        atualizacao.ts_entregue           = agora;
+        atualizacao.dist_realizada_total_m = Math.round(totalDist);
+        atualizacao.duracao_total_ms       = tsAceite ? agora - tsAceite : null;
+      }
+
+      // atualiza só os campos alterados no Firebase (update, não set)
+      await update(ref(db, 'entregas/' + MOTOBOY_ID), atualizacao);
       statusAtual = novoStatus;
       atualizarUI(novoStatus);
     };
 
-    // escuta missão atribuída
+    // ─── escuta missão atribuída pelo despachante ────────────────────────────
     onValue(ref(db, 'entregas/' + MOTOBOY_ID), async (snapshot) => {
       const data = snapshot.val();
+
+      // Firebase retorna null quando o nó foi removido (após proximaMissao)
+      // nesse caso ignora — o reset já foi feito localmente
       if (!data) return;
 
-      entregaId = MOTOBOY_ID;
-      const { destino_lat, destino_lng, destino_endereco, status, criado_em, dist_prevista_m } = data;
+      const { destino_lat, destino_lng, destino_endereco,
+              status, criado_em, dist_prevista_m } = data;
 
-      // só reage se for uma missão nova ou mudança de status externa
+      // ignora se for o mesmo status e destino que já temos
       if (status === statusAtual && destinoAtual) return;
-      statusAtual = status;
+
+      statusAtual  = status;
       destinoAtual = { lat: destino_lat, lng: destino_lng };
 
-      // exibe endereço
-      document.getElementById('missao-endereco').innerText = '📍 ' + destino_endereco.split(',').slice(0,3).join(',');
-      document.getElementById('missao-horario').innerText = new Date(criado_em).toLocaleTimeString('pt-BR');
+      // atualiza endereço e horário no painel
+      document.getElementById('missao-endereco').innerText =
+        '📍 ' + destino_endereco.split(',').slice(0,3).join(',');
+      document.getElementById('missao-horario').innerText =
+        new Date(criado_em).toLocaleTimeString('pt-BR');
 
-      // distância prevista
+      // distância prevista calculada pelo despachante
       if (dist_prevista_m) {
         distPrevista = dist_prevista_m;
         document.getElementById('dist-prevista').innerText = formatDist(dist_prevista_m);
       }
 
-      // se já tem aceite, restaura timer
-      if (data.ts_aceite) {
+      // se a página recarregou com missão já aceita, restaura o timer
+      if (data.ts_aceite && !timerInterval) {
         tsAceite = data.ts_aceite;
-        if (!timerInterval) timerInterval = setInterval(atualizarTimer, 1000);
+        timerInterval = setInterval(atualizarTimer, 1000);
       }
 
       atualizarUI(status);
 
-      // marcador e rota no mapa
+      // atualiza marcador de destino no mapa
       if (map) {
-        if (markerDestino) {
-          markerDestino.setLatLng([destino_lat, destino_lng]);
-        } else {
-          markerDestino = L.marker([destino_lat, destino_lng], { icon: iconDestino }).addTo(map);
-        }
+        // remove o anterior e cria novo — garante popup com nome correto
+        if (markerDestino) { map.removeLayer(markerDestino); markerDestino = null; }
+        markerDestino = L.marker([destino_lat, destino_lng], { icon: iconDestino })
+          .addTo(map)
+          .bindPopup('📦 ' + destino_endereco.split(',').slice(0,2).join(','));
+
         if (lastPos && status !== 'entregue') {
           desenharRota(lastPos.lat, lastPos.lng, destino_lat, destino_lng);
         }
       }
     });
 
-    // GPS
+    // ─── GPS: captura posição e envia ao Firebase ────────────────────────────
     function onPosition(pos) {
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
@@ -325,39 +437,53 @@
 
       if (lastPos) {
         const dist = haversine(lastPos, { lat, lng });
+
+        // descarta se moveu menos de 10m — economiza bateria e dados
         if (dist < DISTANCIA_MINIMA) return;
+
+        // só acumula distância quando a missão está em andamento
         if (statusAtual === 'aceito' || statusAtual === 'coletado') {
           totalDist += dist;
           document.getElementById('dist-realizada').innerText = formatDist(totalDist);
         }
+
+        // redesenha rota a cada novo ponto — mantém rota atualizada
         if (destinoAtual && statusAtual !== 'entregue') {
           desenharRota(lat, lng, destinoAtual.lat, destinoAtual.lng);
         }
       }
 
+      // primeira posição: inicializa o mapa
       if (!map) {
         initMap(lat, lng);
-        if (destinoAtual) {
-          markerDestino = L.marker([destinoAtual.lat, destinoAtual.lng], { icon: iconDestino }).addTo(map);
-          if (statusAtual !== 'entregue') desenharRota(lat, lng, destinoAtual.lat, destinoAtual.lng);
+        if (destinoAtual && statusAtual !== 'entregue') {
+          markerDestino = L.marker(
+            [destinoAtual.lat, destinoAtual.lng], { icon: iconDestino }
+          ).addTo(map);
+          desenharRota(lat, lng, destinoAtual.lat, destinoAtual.lng);
         }
       } else {
+        // posições seguintes: move o pino do motoboy
         markerMotoboy.setLatLng([lat, lng]);
         if (!destinoAtual) map.panTo([lat, lng]);
       }
 
       lastPos = { lat, lng };
       updates++;
+
       document.getElementById('updates').innerText = updates;
-      document.getElementById('acc').innerText = Math.round(acc) + ' m';
+      document.getElementById('acc').innerText     = Math.round(acc) + ' m';
 
       const badge = document.getElementById('badge');
-      badge.innerText = '✅ GPS ativo';
-      badge.className = 'ativo';
+      badge.innerText   = '✅ GPS ativo';
+      badge.className   = 'ativo';
 
+      // envia posição atual ao Firebase para o painel acompanhar
       set(ref(db, 'motoboys/' + MOTOBOY_ID), {
-        lat, lng, acc: Math.round(acc), updated_at: Date.now(),
-        status: statusAtual || 'livre'
+        lat, lng,
+        acc:        Math.round(acc),
+        updated_at: Date.now(),
+        status:     statusAtual || 'livre'
       });
     }
 

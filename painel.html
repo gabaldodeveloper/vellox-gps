@@ -289,11 +289,15 @@
     function atualizarSteps(status) {
       const idx = ordemSteps.indexOf(status);
 
-      // para cada etapa: se já passou → verde (feito), se é atual → vermelho (ativo), senão → cinza
+      // reset: volta todas as etapas para cinza
       ordemSteps.forEach((s, i) => {
         const el = document.getElementById('step-' + s);
-        el.className = 'step' +
-          (i < idx ? ' feito' : i === idx ? ' ativo' : '');
+        if (status === 'reset') {
+          el.className = 'step';
+        } else {
+          // se já passou → verde (feito), se é atual → vermelho (ativo), senão → cinza
+          el.className = 'step' + (i < idx ? ' feito' : i === idx ? ' ativo' : '');
+        }
       });
 
       const statusEl = document.getElementById('entrega-status');
@@ -310,14 +314,12 @@
     // ─── aplica destino no mapa e salva no Firebase ───────────────────────────
     // função central chamada pelas três formas de busca
     async function aplicarDestino(lat, lng, nome) {
-      // move ou cria o pino azul no destino
-      if (markerDestino) {
-        markerDestino.setLatLng([lat, lng]);
-      } else {
-        markerDestino = L.marker([lat, lng], { icon: iconDestino() })
-          .addTo(map)
-          .bindPopup('📦 ' + nome.split(',').slice(0, 2).join(','));
-      }
+      // remove marcador anterior e cria novo com nome atualizado
+      // isso garante que o popup sempre mostre o endereço correto
+      if (markerDestino) { map.removeLayer(markerDestino); markerDestino = null; }
+      markerDestino = L.marker([lat, lng], { icon: iconDestino() })
+        .addTo(map)
+        .bindPopup('📦 ' + nome.split(',').slice(0, 2).join(','));
       markerDestino.openPopup();
 
       // ajusta zoom para mostrar motoboy e destino ao mesmo tempo
@@ -452,7 +454,21 @@
     // o Firebase avisa automaticamente quando o motoboy muda o status
     onValue(ref(db, 'entregas/' + MOTOBOY_ID), (snapshot) => {
       const data = snapshot.val();
-      if (!data) return;
+
+      // motoboy chamou proximaMissao() — Firebase removeu o nó
+      // reseta o painel para estado inicial
+      if (!data) {
+        atualizarSteps('reset');
+        document.getElementById('entrega-status').className = '';
+        document.getElementById('entrega-status').innerText = '— Nenhuma entrega ativa';
+        document.getElementById('dist-prevista').innerText  = '—';
+        document.getElementById('dist-realizada').innerText = '—';
+        document.getElementById('duracao').innerText        = '—';
+        if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+        // remove pino de destino do mapa
+        if (markerDestino) { map.removeLayer(markerDestino); markerDestino = null; }
+        return;
+      }
 
       const { status, dist_prevista_m, dist_realizada_total_m,
               ts_aceite, duracao_total_ms } = data;
