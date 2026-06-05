@@ -19,23 +19,52 @@
     #badge.ativo { background: #e6f9f0; border-color: #5dca8a; color: #1a7a46; }
     #badge.erro  { background: #fdecea; border-color: #e87070; color: #a32d2d; }
 
-    #destino-bar {
-      font-size: 13px; padding: 8px 12px; border-radius: 8px;
-      background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
-      margin-bottom: 8px; display: none;
+    /* painel de missão */
+    #missao-panel {
+      border-radius: 10px; border: 1px solid #ddd;
+      background: white; margin-bottom: 10px;
+      overflow: hidden; display: none;
     }
+    #missao-header {
+      padding: 10px 14px; font-size: 13px; font-weight: 600;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    #missao-header.pendente  { background: #fff8e6; color: #7a5c00; border-bottom: 1px solid #f5c842; }
+    #missao-header.aceito    { background: #eff6ff; color: #1e40af; border-bottom: 1px solid #bfdbfe; }
+    #missao-header.coletado  { background: #f0fdf4; color: #166534; border-bottom: 1px solid #86efac; }
+    #missao-header.entregue  { background: #f0fdf4; color: #166534; border-bottom: 1px solid #86efac; }
+
+    #missao-body { padding: 10px 14px; font-size: 13px; color: #444; }
+    #missao-endereco { font-weight: 500; margin-bottom: 8px; }
+
+    .missao-stats {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+      margin-bottom: 10px;
+    }
+    .missao-stat { background: #f5f5f5; border-radius: 6px; padding: 6px 8px; }
+    .missao-stat-label { font-size: 10px; color: #999; }
+    .missao-stat-value { font-size: 13px; font-weight: 600; color: #1a1a1a; }
+
+    .btn-acao {
+      width: 100%; padding: 12px; border: none; border-radius: 8px;
+      font-size: 15px; font-weight: 700; cursor: pointer; margin-bottom: 6px;
+    }
+    .btn-aceitar  { background: #2563eb; color: white; }
+    .btn-coletar  { background: #f59e0b; color: white; }
+    .btn-entregar { background: #16a34a; color: white; }
+    .btn-acao:active { opacity: 0.85; }
 
     #map {
-      width: 100%; height: calc(100vh - 240px);
-      min-height: 300px; border-radius: 12px;
+      width: 100%; height: calc(100vh - 320px);
+      min-height: 260px; border-radius: 12px;
       border: 1px solid #ddd; overflow: hidden;
       background: #e8e8e8; margin-bottom: 10px;
     }
 
     .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
-    .card { background: white; border-radius: 8px; padding: 10px 12px; border: 1px solid #eee; }
-    .card-label { font-size: 11px; color: #999; margin-bottom: 4px; }
-    .card-value { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+    .card { background: white; border-radius: 8px; padding: 8px 10px; border: 1px solid #eee; }
+    .card-label { font-size: 10px; color: #999; margin-bottom: 3px; }
+    .card-value { font-size: 13px; font-weight: 600; color: #1a1a1a; }
 
     .info { font-size: 11px; color: #aaa; }
   </style>
@@ -43,24 +72,49 @@
 <body>
 
   <h1>🏍️ Vellox — Motoboy</h1>
-
   <span id="badge">📍 Aguardando GPS...</span>
-  <div id="destino-bar">📦 Destino: <span id="destino-nome">—</span></div>
+
+  <div id="missao-panel">
+    <div id="missao-header" class="pendente">
+      <span id="missao-status-label">⏳ Nova missão</span>
+      <span id="missao-horario"></span>
+    </div>
+    <div id="missao-body">
+      <div id="missao-endereco">—</div>
+      <div class="missao-stats">
+        <div class="missao-stat">
+          <div class="missao-stat-label">dist. prevista</div>
+          <div class="missao-stat-value" id="dist-prevista">—</div>
+        </div>
+        <div class="missao-stat">
+          <div class="missao-stat-label">dist. realizada</div>
+          <div class="missao-stat-value" id="dist-realizada">0 m</div>
+        </div>
+        <div class="missao-stat">
+          <div class="missao-stat-label">tempo</div>
+          <div class="missao-stat-value" id="tempo-missao">—</div>
+        </div>
+      </div>
+      <button class="btn-acao btn-aceitar"  id="btn-aceitar"  onclick="acaoMissao('aceito')"   style="display:none">✅ Aceitar missão</button>
+      <button class="btn-acao btn-coletar"  id="btn-coletar"  onclick="acaoMissao('coletado')" style="display:none">📦 Confirmei coleta do pacote</button>
+      <button class="btn-acao btn-entregar" id="btn-entregar" onclick="acaoMissao('entregue')" style="display:none">🏁 Confirmei entrega</button>
+    </div>
+  </div>
 
   <div id="map"></div>
 
   <div class="cards">
     <div class="card">
-      <div class="card-label">precisão</div>
+      <div class="card-label">precisão GPS</div>
       <div class="card-value" id="acc">—</div>
     </div>
     <div class="card">
-      <div class="card-label">envios</div>
+      <div class="card-label">envios GPS</div>
       <div class="card-value" id="updates">0</div>
     </div>
     <div class="card">
-      <div class="card-label">dist. percorrida</div>
-      <div class="card-value" id="dist">0 m</div>
+      <div class="card-label">status</div>
+      <div class="card-value" id="status-label">livre</div>
     </div>
   </div>
 
@@ -69,7 +123,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getDatabase, ref, set, update, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyC9TEivEbj_fbpCSmdAWdxRxF3zFyHsN7o",
@@ -88,19 +142,21 @@
 
     let map, markerMotoboy, markerDestino, rotaLayer;
     let updates = 0, totalDist = 0;
-    let lastPos = null, trail = [];
+    let lastPos = null;
     let destinoAtual = null;
+    let statusAtual = null;
+    let entregaId = null;
+    let distPrevista = 0;
+    let tsAceite = null;
+    let timerInterval = null;
 
-    // ícone motoboy
     const iconMotoboy = L.divIcon({
       html: '<div style="width:16px;height:16px;border-radius:50%;background:#e84545;border:3px solid white;box-shadow:0 0 0 2px #e84545;"></div>',
-      iconSize: [16, 16], iconAnchor: [8, 8], className: ''
+      iconSize: [16,16], iconAnchor: [8,8], className: ''
     });
-
-    // ícone destino — pino azul
     const iconDestino = L.divIcon({
-      html: '<div style="width:20px;height:20px;border-radius:50% 50% 50% 0;background:#2563eb;border:3px solid white;box-shadow:0 0 0 2px #2563eb;transform:rotate(-45deg);"></div>',
-      iconSize: [20, 20], iconAnchor: [10, 20], className: ''
+      html: '<div style="width:20px;height:20px;border-radius:50% 50% 50% 0;background:#2563eb;border:3px solid white;transform:rotate(-45deg);"></div>',
+      iconSize: [20,20], iconAnchor: [10,20], className: ''
     });
 
     function initMap(lat, lng) {
@@ -116,58 +172,146 @@
       const dLat = (b.lat - a.lat) * Math.PI / 180;
       const dLng = (b.lng - a.lng) * Math.PI / 180;
       const x = Math.sin(dLat/2)**2 +
-        Math.cos(a.lat * Math.PI/180) * Math.cos(b.lat * Math.PI/180) * Math.sin(dLng/2)**2;
-      return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+        Math.cos(a.lat*Math.PI/180) * Math.cos(b.lat*Math.PI/180) * Math.sin(dLng/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
     }
 
-    // busca rota via OSRM e desenha no mapa
+    function formatDist(m) {
+      return m < 1000 ? Math.round(m) + ' m' : (m/1000).toFixed(2) + ' km';
+    }
+
+    function formatTempo(ms) {
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60);
+      const h = Math.floor(m / 60);
+      if (h > 0) return `${h}h ${m % 60}min`;
+      if (m > 0) return `${m}min ${s % 60}s`;
+      return `${s}s`;
+    }
+
+    function atualizarTimer() {
+      if (!tsAceite) return;
+      document.getElementById('tempo-missao').innerText = formatTempo(Date.now() - tsAceite);
+    }
+
     async function desenharRota(origemLat, origemLng, destinoLat, destinoLng) {
       try {
         const url = `https://router.project-osrm.org/route/v1/driving/${origemLng},${origemLat};${destinoLng},${destinoLat}?overview=full&geometries=geojson`;
         const res = await fetch(url);
         const data = await res.json();
+        if (data.code !== 'Ok') return 0;
 
-        if (data.code !== 'Ok') return;
-
-        const coords = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-
+        const coords = data.routes[0].geometry.coordinates.map(([ln, lt]) => [lt, ln]);
         if (rotaLayer) map.removeLayer(rotaLayer);
         rotaLayer = L.polyline(coords, { color: '#2563eb', weight: 4, opacity: 0.7 }).addTo(map);
-
-        // ajusta mapa para mostrar rota completa
         map.fitBounds(rotaLayer.getBounds(), { padding: [40, 40] });
 
-      } catch (err) {
-        console.error('Erro ao buscar rota:', err);
+        return data.routes[0].distance; // metros
+      } catch { return 0; }
+    }
+
+    // atualiza UI conforme status da missão
+    function atualizarUI(status) {
+      const panel = document.getElementById('missao-panel');
+      const header = document.getElementById('missao-header');
+      const label  = document.getElementById('missao-status-label');
+
+      panel.style.display = 'block';
+
+      document.getElementById('btn-aceitar').style.display  = 'none';
+      document.getElementById('btn-coletar').style.display  = 'none';
+      document.getElementById('btn-entregar').style.display = 'none';
+
+      if (status === 'pendente') {
+        header.className = 'pendente';
+        label.innerText = '⏳ Nova missão';
+        document.getElementById('btn-aceitar').style.display = 'block';
+        document.getElementById('status-label').innerText = 'pendente';
+      } else if (status === 'aceito') {
+        header.className = 'aceito';
+        label.innerText = '🔵 Missão aceita — buscar pacote';
+        document.getElementById('btn-coletar').style.display = 'block';
+        document.getElementById('status-label').innerText = 'aceito';
+      } else if (status === 'coletado') {
+        header.className = 'coletado';
+        label.innerText = '🟡 Pacote coletado — em rota';
+        document.getElementById('btn-entregar').style.display = 'block';
+        document.getElementById('status-label').innerText = 'em rota';
+      } else if (status === 'entregue') {
+        header.className = 'entregue';
+        label.innerText = '✅ Entregue';
+        document.getElementById('status-label').innerText = 'entregue';
+        if (timerInterval) clearInterval(timerInterval);
       }
     }
 
-    // escuta destino atribuído pelo despachante
-    onValue(ref(db, 'entregas/' + MOTOBOY_ID), (snapshot) => {
+    // ação dos botões
+    window.acaoMissao = async function(novoStatus) {
+      if (!entregaId) return;
+      const agora = Date.now();
+      const atualizacao = { status: novoStatus };
+
+      if (novoStatus === 'aceito') {
+        atualizacao.ts_aceite = agora;
+        tsAceite = agora;
+        timerInterval = setInterval(atualizarTimer, 1000);
+      }
+      if (novoStatus === 'coletado') {
+        atualizacao.ts_coletado = agora;
+        atualizacao.dist_realizada_coleta_m = Math.round(totalDist);
+        totalDist = 0; // zera para medir só a entrega
+      }
+      if (novoStatus === 'entregue') {
+        atualizacao.ts_entregue = agora;
+        atualizacao.dist_realizada_entrega_m = Math.round(totalDist);
+        atualizacao.dist_realizada_total_m = Math.round(totalDist);
+        atualizacao.duracao_total_ms = tsAceite ? agora - tsAceite : null;
+      }
+
+      await update(ref(db, 'entregas/' + entregaId), atualizacao);
+      statusAtual = novoStatus;
+      atualizarUI(novoStatus);
+    };
+
+    // escuta missão atribuída
+    onValue(ref(db, 'entregas/' + MOTOBOY_ID), async (snapshot) => {
       const data = snapshot.val();
       if (!data) return;
 
-      const { destino_lat, destino_lng, destino_endereco } = data;
+      entregaId = MOTOBOY_ID;
+      const { destino_lat, destino_lng, destino_endereco, status, criado_em, dist_prevista_m } = data;
+
+      // só reage se for uma missão nova ou mudança de status externa
+      if (status === statusAtual && destinoAtual) return;
+      statusAtual = status;
       destinoAtual = { lat: destino_lat, lng: destino_lng };
 
-      // mostra barra de destino
-      const bar = document.getElementById('destino-bar');
-      bar.style.display = 'block';
-      document.getElementById('destino-nome').innerText = destino_endereco.split(',').slice(0, 3).join(',');
+      // exibe endereço
+      document.getElementById('missao-endereco').innerText = '📍 ' + destino_endereco.split(',').slice(0,3).join(',');
+      document.getElementById('missao-horario').innerText = new Date(criado_em).toLocaleTimeString('pt-BR');
 
-      // coloca marcador de destino
+      // distância prevista
+      if (dist_prevista_m) {
+        distPrevista = dist_prevista_m;
+        document.getElementById('dist-prevista').innerText = formatDist(dist_prevista_m);
+      }
+
+      // se já tem aceite, restaura timer
+      if (data.ts_aceite) {
+        tsAceite = data.ts_aceite;
+        if (!timerInterval) timerInterval = setInterval(atualizarTimer, 1000);
+      }
+
+      atualizarUI(status);
+
+      // marcador e rota no mapa
       if (map) {
         if (markerDestino) {
           markerDestino.setLatLng([destino_lat, destino_lng]);
         } else {
-          markerDestino = L.marker([destino_lat, destino_lng], { icon: iconDestino })
-            .addTo(map)
-            .bindPopup('📦 ' + destino_endereco.split(',').slice(0, 2).join(','));
-          markerDestino.openPopup();
+          markerDestino = L.marker([destino_lat, destino_lng], { icon: iconDestino }).addTo(map);
         }
-
-        // desenha rota se já tem posição atual
-        if (lastPos) {
+        if (lastPos && status !== 'entregue') {
           desenharRota(lastPos.lat, lastPos.lng, destino_lat, destino_lng);
         }
       }
@@ -182,42 +326,38 @@
       if (lastPos) {
         const dist = haversine(lastPos, { lat, lng });
         if (dist < DISTANCIA_MINIMA) return;
-        totalDist += dist;
-
-        // redesenha rota a cada atualização de posição
-        if (destinoAtual) {
+        if (statusAtual === 'aceito' || statusAtual === 'coletado') {
+          totalDist += dist;
+          document.getElementById('dist-realizada').innerText = formatDist(totalDist);
+        }
+        if (destinoAtual && statusAtual !== 'entregue') {
           desenharRota(lat, lng, destinoAtual.lat, destinoAtual.lng);
         }
       }
 
       if (!map) {
         initMap(lat, lng);
-        // se já tem destino mas mapa acabou de iniciar
         if (destinoAtual) {
           markerDestino = L.marker([destinoAtual.lat, destinoAtual.lng], { icon: iconDestino }).addTo(map);
-          desenharRota(lat, lng, destinoAtual.lat, destinoAtual.lng);
+          if (statusAtual !== 'entregue') desenharRota(lat, lng, destinoAtual.lat, destinoAtual.lng);
         }
       } else {
         markerMotoboy.setLatLng([lat, lng]);
         if (!destinoAtual) map.panTo([lat, lng]);
       }
 
-      trail.push([lat, lng]);
       lastPos = { lat, lng };
       updates++;
-
       document.getElementById('updates').innerText = updates;
       document.getElementById('acc').innerText = Math.round(acc) + ' m';
-      document.getElementById('dist').innerText = totalDist < 1000
-        ? Math.round(totalDist) + ' m'
-        : (totalDist / 1000).toFixed(2) + ' km';
 
       const badge = document.getElementById('badge');
-      badge.innerText = '✅ Enviando posição...';
+      badge.innerText = '✅ GPS ativo';
       badge.className = 'ativo';
 
       set(ref(db, 'motoboys/' + MOTOBOY_ID), {
-        lat, lng, acc: Math.round(acc), updated_at: Date.now()
+        lat, lng, acc: Math.round(acc), updated_at: Date.now(),
+        status: statusAtual || 'livre'
       });
     }
 

@@ -17,7 +17,7 @@
     header span { font-size: 12px; color: #999; }
 
     .entrega-form {
-      display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;
+      display: flex; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;
     }
     .entrega-form input {
       flex: 1; min-width: 200px; padding: 8px 12px;
@@ -30,33 +30,54 @@
       border: none; border-radius: 8px; font-size: 14px;
       cursor: pointer; font-weight: 600;
     }
-    .entrega-form button:hover { background: #c73535; }
     .entrega-form button:disabled { background: #ccc; cursor: not-allowed; }
 
     #geocode-status { font-size: 12px; color: #888; margin-bottom: 10px; min-height: 18px; }
 
     #map {
-      width: 100%; height: calc(100vh - 260px);
-      min-height: 350px; border-radius: 12px;
+      width: 100%; height: calc(100vh - 330px);
+      min-height: 300px; border-radius: 12px;
       border: 1px solid #ddd; overflow: hidden;
-      background: #e8e8e8; margin-bottom: 14px;
+      background: #e8e8e8; margin-bottom: 12px;
     }
 
-    .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
-    @media (max-width: 600px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+    .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+    @media (max-width: 700px) { .cards { grid-template-columns: repeat(2, 1fr); } }
     .card { background: white; border-radius: 8px; padding: 10px 14px; border: 1px solid #eee; }
     .card-label { font-size: 11px; color: #999; margin-bottom: 4px; }
-    .card-value { font-size: 15px; font-weight: 600; color: #1a1a1a; word-break: break-word; }
+    .card-value { font-size: 14px; font-weight: 600; color: #1a1a1a; word-break: break-word; }
 
-    #status-bar {
+    /* status da entrega */
+    #entrega-status {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: 8px; margin-bottom: 10px;
+      background: #f0f0f0; border: 1px solid #ddd; font-size: 13px; color: #666;
+    }
+    #entrega-status.pendente  { background: #fff8e6; border-color: #f5c842; color: #7a5c00; }
+    #entrega-status.aceito    { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+    #entrega-status.coletado  { background: #fefce8; border-color: #fde68a; color: #854d0e; }
+    #entrega-status.entregue  { background: #f0fdf4; border-color: #86efac; color: #166534; }
+
+    .steps {
+      display: flex; gap: 4px; align-items: center;
+      font-size: 12px; margin-bottom: 10px; flex-wrap: wrap;
+    }
+    .step {
+      padding: 4px 10px; border-radius: 20px;
+      background: #e5e7eb; color: #6b7280; font-weight: 500;
+    }
+    .step.ativo   { background: #e84545; color: white; }
+    .step.feito   { background: #16a34a; color: white; }
+    .step-sep { color: #ccc; font-size: 10px; }
+
+    #motoboy-status {
       display: flex; align-items: center; gap: 8px;
       font-size: 13px; padding: 8px 14px; border-radius: 8px;
       background: #f0f0f0; border: 1px solid #ddd; color: #666;
     }
-    #status-bar.ativo     { background: #e6f9f0; border-color: #5dca8a; color: #1a7a46; }
-    #status-bar.aguardando{ background: #fff8e6; border-color: #f5c842; color: #7a5c00; }
-    #status-bar.offline   { background: #f0f0f0; border-color: #ccc;    color: #888; }
-
+    #motoboy-status.ativo    { background: #e6f9f0; border-color: #5dca8a; color: #1a7a46; }
+    #motoboy-status.offline  { background: #f0f0f0; border-color: #ccc; color: #888; }
+    #motoboy-status.aguardando { background: #fff8e6; border-color: #f5c842; color: #7a5c00; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
   </style>
 </head>
@@ -68,35 +89,49 @@
   </header>
 
   <div class="entrega-form">
-    <input type="text" id="endereco-input" placeholder="Digite o endereço de entrega — ex: Rua XV de Novembro, 1000, Curitiba" />
+    <input type="text" id="endereco-input" placeholder="Endereço de entrega — ex: Rua XV de Novembro, 1000, Curitiba"/>
     <button id="btn-definir" onclick="definirDestino()">Definir destino</button>
   </div>
   <div id="geocode-status"></div>
+
+  <!-- etapas visuais -->
+  <div class="steps">
+    <div class="step" id="step-pendente">⏳ Pendente</div>
+    <div class="step-sep">›</div>
+    <div class="step" id="step-aceito">✅ Aceito</div>
+    <div class="step-sep">›</div>
+    <div class="step" id="step-coletado">📦 Coletado</div>
+    <div class="step-sep">›</div>
+    <div class="step" id="step-entregue">🏁 Entregue</div>
+  </div>
+
+  <!-- status atual da entrega -->
+  <div id="entrega-status">— Nenhuma entrega ativa</div>
 
   <div id="map"></div>
 
   <div class="cards">
     <div class="card">
-      <div class="card-label">motoboy</div>
-      <div class="card-value" id="coords-motoboy">—</div>
+      <div class="card-label">dist. prevista</div>
+      <div class="card-value" id="dist-prevista">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">dist. realizada</div>
+      <div class="card-value" id="dist-realizada">—</div>
     </div>
     <div class="card">
       <div class="card-label">precisão GPS</div>
       <div class="card-value" id="acc">—</div>
     </div>
     <div class="card">
-      <div class="card-label">destino</div>
-      <div class="card-value" id="destino-display">Não definido</div>
-    </div>
-    <div class="card">
-      <div class="card-label">atualizações</div>
-      <div class="card-value" id="updates">0</div>
+      <div class="card-label">duração</div>
+      <div class="card-value" id="duracao">—</div>
     </div>
   </div>
 
-  <div id="status-bar" class="aguardando">
+  <div id="motoboy-status" class="aguardando">
     <div class="dot"></div>
-    <span id="status-text">Aguardando posição do motoboy...</span>
+    <span id="motoboy-status-text">Aguardando posição do motoboy...</span>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -119,21 +154,19 @@
     const MOTOBOY_ID = "motoboy_01";
 
     let map, markerMotoboy, markerDestino;
-    let updates = 0;
     let mapInitialized = false;
     let lastUpdatedAt = null;
+    let timerInterval = null;
+    let tsAceite = null;
 
-    // ícone motoboy — pino vermelho pulsante
     const iconMotoboy = () => L.divIcon({
       html: `<div style="width:20px;height:20px;border-radius:50%;background:#e84545;border:3px solid white;box-shadow:0 0 0 2px #e84545;animation:pulse 1.5s infinite;"></div>
       <style>@keyframes pulse{0%{box-shadow:0 0 0 2px #e84545}50%{box-shadow:0 0 0 8px rgba(232,69,69,0.2)}100%{box-shadow:0 0 0 2px #e84545}}</style>`,
-      iconSize: [20, 20], iconAnchor: [10, 10], className: ''
+      iconSize: [20,20], iconAnchor: [10,10], className: ''
     });
-
-    // ícone destino — pino azul
     const iconDestino = () => L.divIcon({
-      html: `<div style="width:20px;height:20px;border-radius:50% 50% 50% 0;background:#2563eb;border:3px solid white;box-shadow:0 0 0 2px #2563eb;transform:rotate(-45deg);"></div>`,
-      iconSize: [20, 20], iconAnchor: [10, 20], className: ''
+      html: `<div style="width:20px;height:20px;border-radius:50% 50% 50% 0;background:#2563eb;border:3px solid white;transform:rotate(-45deg);"></div>`,
+      iconSize: [20,20], iconAnchor: [10,20], className: ''
     });
 
     function initMap(lat, lng) {
@@ -145,21 +178,60 @@
       mapInitialized = true;
     }
 
-    function formatTime(ts) {
-      return new Date(ts).toLocaleTimeString('pt-BR');
+    function formatTime(ts) { return new Date(ts).toLocaleTimeString('pt-BR'); }
+    function formatDist(m)  { return m < 1000 ? Math.round(m) + ' m' : (m/1000).toFixed(2) + ' km'; }
+    function formatDuracao(ms) {
+      const s = Math.floor(ms/1000), m = Math.floor(s/60), h = Math.floor(m/60);
+      if (h > 0) return `${h}h ${m%60}min`;
+      if (m > 0) return `${m}min ${s%60}s`;
+      return `${s}s`;
     }
 
-    // verifica presença a cada 5 segundos
-    setInterval(() => {
-      if (!lastUpdatedAt) return;
-      const segundos = Math.round((Date.now() - lastUpdatedAt) / 1000);
-      if (segundos > 30) {
-        const bar = document.getElementById('status-bar');
-        bar.className = 'offline';
-        document.getElementById('status-text').innerText =
-          '⚫ Motoboy offline — último sinal há ' + segundos + 's';
+    // atualiza etapas visuais
+    const ordemSteps = ['pendente','aceito','coletado','entregue'];
+    function atualizarSteps(status) {
+      const idx = ordemSteps.indexOf(status);
+      ordemSteps.forEach((s, i) => {
+        const el = document.getElementById('step-' + s);
+        el.className = 'step' + (i < idx ? ' feito' : i === idx ? ' ativo' : '');
+      });
+
+      const statusEl = document.getElementById('entrega-status');
+      statusEl.className = status;
+      const labels = {
+        pendente: '⏳ Aguardando aceite do motoboy',
+        aceito:   '🔵 Motoboy a caminho para coletar',
+        coletado: '📦 Pacote coletado — em rota de entrega',
+        entregue: '✅ Entregue com sucesso'
+      };
+      statusEl.innerText = labels[status] || status;
+    }
+
+    // escuta status da entrega
+    onValue(ref(db, 'entregas/' + MOTOBOY_ID), (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+
+      const { status, dist_prevista_m, dist_realizada_total_m, ts_aceite, duracao_total_ms } = data;
+
+      atualizarSteps(status);
+
+      if (dist_prevista_m)
+        document.getElementById('dist-prevista').innerText = formatDist(dist_prevista_m);
+
+      if (dist_realizada_total_m)
+        document.getElementById('dist-realizada').innerText = formatDist(dist_realizada_total_m);
+
+      if (duracao_total_ms) {
+        document.getElementById('duracao').innerText = formatDuracao(duracao_total_ms);
+        if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+      } else if (ts_aceite && !timerInterval) {
+        tsAceite = ts_aceite;
+        timerInterval = setInterval(() => {
+          document.getElementById('duracao').innerText = formatDuracao(Date.now() - tsAceite);
+        }, 1000);
       }
-    }, 5000);
+    });
 
     // escuta posição do motoboy
     onValue(ref(db, 'motoboys/' + MOTOBOY_ID), (snapshot) => {
@@ -174,19 +246,35 @@
         map.panTo([lat, lng]);
       }
 
-      updates++;
       lastUpdatedAt = updated_at;
-      document.getElementById('coords-motoboy').innerText = lat.toFixed(5) + ', ' + lng.toFixed(5);
       document.getElementById('acc').innerText = acc + ' m';
-      document.getElementById('updates').innerText = updates;
       document.getElementById('last-update').innerText = 'Última atualização: ' + formatTime(updated_at);
 
-      const bar = document.getElementById('status-bar');
+      const bar = document.getElementById('motoboy-status');
       bar.className = 'ativo';
-      document.getElementById('status-text').innerText = '🏍️ Motoboy online — posição recebida às ' + formatTime(updated_at);
+      document.getElementById('motoboy-status-text').innerText = '🏍️ Motoboy online — ' + formatTime(updated_at);
     });
 
-    // geocoding via Nominatim
+    // verifica presença
+    setInterval(() => {
+      if (!lastUpdatedAt) return;
+      const s = Math.round((Date.now() - lastUpdatedAt) / 1000);
+      if (s > 30) {
+        document.getElementById('motoboy-status').className = 'offline';
+        document.getElementById('motoboy-status-text').innerText = '⚫ Offline — último sinal há ' + s + 's';
+      }
+    }, 5000);
+
+    // geocoding
+    async function buscarRota(origemLat, origemLng, destinoLat, destinoLng) {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${origemLng},${origemLat};${destinoLng},${destinoLat}?overview=false`;
+        const res = await fetch(url);
+        const data = await res.json();
+        return data.code === 'Ok' ? data.routes[0].distance : 0;
+      } catch { return 0; }
+    }
+
     window.definirDestino = async function() {
       const endereco = document.getElementById('endereco-input').value.trim();
       if (!endereco) return;
@@ -202,7 +290,7 @@
         const data = await res.json();
 
         if (!data || data.length === 0) {
-          status.innerText = '❌ Endereço não encontrado. Tente ser mais específico.';
+          status.innerText = '❌ Endereço não encontrado.';
           btn.disabled = false;
           return;
         }
@@ -211,47 +299,49 @@
         const lng = parseFloat(data[0].lon);
         const nome = data[0].display_name;
 
-        // coloca ou move marcador de destino
-        if (markerDestino) {
-          markerDestino.setLatLng([lat, lng]);
+        // marcador destino
+        if (!map) {
+          status.innerText = '⚠️ Aguarde o motoboy conectar para exibir no mapa.';
         } else {
-          markerDestino = L.marker([lat, lng], { icon: iconDestino() })
-            .addTo(map)
-            .bindPopup('📦 Destino: ' + nome);
+          if (markerDestino) {
+            markerDestino.setLatLng([lat, lng]);
+          } else {
+            markerDestino = L.marker([lat, lng], { icon: iconDestino() }).addTo(map).bindPopup('📦 ' + nome);
+          }
+          markerDestino.openPopup();
+          if (markerMotoboy) {
+            map.fitBounds(L.latLngBounds(markerMotoboy.getLatLng(), [lat, lng]), { padding: [40,40] });
+          }
         }
-        markerDestino.openPopup();
 
-        // ajusta mapa para mostrar motoboy e destino
+        // calcula distância prevista
+        let distPrevista = 0;
         if (markerMotoboy) {
-          const bounds = L.latLngBounds(
-            markerMotoboy.getLatLng(),
-            [lat, lng]
-          );
-          map.fitBounds(bounds, { padding: [40, 40] });
-        } else {
-          map.setView([lat, lng], 15);
+          const ml = markerMotoboy.getLatLng();
+          distPrevista = await buscarRota(ml.lat, ml.lng, lat, lng);
         }
 
-        // salva destino no Firebase para o motoboy receber
+        // salva no Firebase
         set(ref(db, 'entregas/' + MOTOBOY_ID), {
           destino_lat: lat,
           destino_lng: lng,
           destino_endereco: nome,
-          status: 'em_rota',
+          status: 'pendente',
+          dist_prevista_m: Math.round(distPrevista),
           criado_em: Date.now()
         });
 
-        document.getElementById('destino-display').innerText = endereco;
-        status.innerText = '✅ Destino definido — motoboy notificado.';
+        status.innerText = '✅ Missão criada — aguardando aceite do motoboy.';
+        if (distPrevista > 0)
+          document.getElementById('dist-prevista').innerText = formatDist(distPrevista);
 
       } catch (err) {
-        status.innerText = '❌ Erro ao buscar endereço: ' + err.message;
+        status.innerText = '❌ Erro: ' + err.message;
       }
 
       btn.disabled = false;
     };
 
-    // permite pressionar Enter no campo
     document.getElementById('endereco-input').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') window.definirDestino();
     });
